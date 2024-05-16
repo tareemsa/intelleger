@@ -12,6 +12,13 @@ from django.contrib.auth import authenticate
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
+from datetime import timedelta
+from .serializers import  send_verification_email
+
+
+
+from rest_framework.permissions import AllowAny
+import secrets
 
 from .serializers import CustomTokenObtainPairSerializer
 
@@ -74,23 +81,7 @@ class PasswordResetView(APIView):
 
 
 
-class LogoutView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
 
-    def post(self, request):
-        try:
-            # Attempt to get and blacklist the refresh token
-            refresh_token = request.data.get("refresh_token")
-            token = RefreshToken(refresh_token)
-            token.blacklist()
-
-            # Optionally, you might also want to blacklist any outstanding tokens for the user
-            for outstanding_token in OutstandingToken.objects.filter(user=request.user):
-                BlacklistedToken.objects.get_or_create(token=outstanding_token)
-
-            return Response(status=status.HTTP_205_RESET_CONTENT)
-        except Exception as e:
-            return Response(str(e), status=status.HTTP_400_BAD_REQUEST)
 
 
 
@@ -126,3 +117,41 @@ class CustomTokenObtainPairView(TokenObtainPairView):
             return Response({"detail": str(e.detail)}, status=status.HTTP_401_UNAUTHORIZED)
 
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
+
+
+
+
+
+
+
+
+
+
+class ResendVerificationCode(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, format=None):
+        email = request.data.get('email')
+        if not email:
+            return Response({"email": "This field is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(email=email)
+            # Check if the user is already active, if so, no need to resend verification
+            if user.is_active:
+                return Response({"message": "This account is already active."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Update verification code and expiry
+            user.verification_code = secrets.token_urlsafe(16)[:6]
+            user.verification_code_expiry = timezone.now() + timedelta(minutes=10)
+            user.save()
+
+            # Reuse existing function to send the verification email
+            send_verification_email(user)
+
+            return Response({"message": "Verification code resent successfully."}, status=status.HTTP_200_OK)
+        except User.DoesNotExist:
+            return Response({"email": "User not found with this email."}, status=status.HTTP_404_NOT_FOUND)
+
+# Add the appropriate URL pattern to link this view
+

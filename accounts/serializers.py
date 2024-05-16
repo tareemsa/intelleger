@@ -129,3 +129,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'access': str(refresh.access_token),
             'email': user.email
         }
+
+
+
+
+
