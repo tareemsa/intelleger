@@ -1,8 +1,8 @@
-from rest_framework import status
+from rest_framework import status,views
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from .models import Project,Task
-from .serializers import ProjectSerializer,UserSerializer,TaskSerializer
+from .serializers import ProjectSerializer,UserSerializer,TaskSerializer,UpdateDevelopersSerializer
 from .permissions import IsAdminUser  # Make sure to import the custom permission
 from rest_framework import generics,permissions
 from .models import CustomUser
@@ -10,15 +10,79 @@ from rest_framework.permissions import IsAuthenticated
 from django.http import Http404
 from rest_framework.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404
+from django.core.exceptions import ValidationError
+from .ai_service import generate_ai_requirements  # AI service integration
+
 
 class ProjectCreateView(generics.CreateAPIView):
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+
+        # Retrieve the project instance and scope from the serializer
+        project = serializer.instance
+        scope = serializer.validated_data['scope']
+
+        # Generate AI requirements using the scope
+        ai_requirements = generate_ai_requirements(scope)
+
+        # Build the response data including project details and AI requirements
+        response_data = {
+            "project": ProjectSerializer(project, context={'request': request}).data,
+            "ai_requirements": ai_requirements
+        }
+
+        return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
+        
+class AcceptAIRequirementsView(APIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = TaskSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
 
-    def perform_create(self, serializer):
-        serializer.save(manager=self.request.user)
+    def post(self, request, *args, **kwargs):
+        project_id = request.data.get('project_id')
+        ai_requirements = request.data.get('ai_requirements', [])
 
+        project = Project.objects.get(pk=project_id)  # Handle DoesNotExist in production
+
+        for req in ai_requirements['functional_requirements']:
+            Task.objects.create(
+                project=project,
+                description=req['description'],
+                status='Pending',
+                deadline=req['deadline']  # Now using the deadline provided in the request
+            )
+
+        return Response({"message": "Tasks created from AI requirements."})
+
+
+
+class EditAndSaveRequirementsView(APIView):
+    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    def post(self, request, *args, **kwargs):
+        project_id = request.data.get('project_id')
+        edited_requirements = request.data.get('edited_requirements', [])
+
+        project = Project.objects.get(pk=project_id)  # Handle DoesNotExist in production
+        Task.objects.filter(project=project).delete()  # Clear previous AI tasks if any
+        for req in edited_requirements:
+            Task.objects.create(
+                project=project,
+                description=req['description'],
+                status='Pending',
+                deadline=req['deadline']  # Now using the deadline provided in the request
+            )    
+            
+        return Response({"message": "Edited tasks saved."})
+
+###############################
 
 class ProjectListView(generics.ListAPIView):
     serializer_class = ProjectSerializer
@@ -74,7 +138,7 @@ class ProjectDevelopersListView(generics.ListAPIView):
 
 class ProjectAssignDevelopersView(generics.UpdateAPIView):
     queryset = Project.objects.all()
-    serializer_class = ProjectSerializer
+    serializer_class = UpdateDevelopersSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
@@ -93,20 +157,35 @@ class ProjectAssignDevelopersView(generics.UpdateAPIView):
 
     def patch(self, request, *args, **kwargs):
         project = self.get_object()  # This checks permission and raises Http404 if not found or PermissionDenied if not allowed
-        serializer = self.get_serializer(project, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({
-                "status": "success",
-                "message": "Developers updated successfully.",
-                "data": serializer.data
-            }, status=status.HTTP_200_OK)
-        else:
+
+        # Merge new developers with existing developers
+        new_developer_ids = request.data.get('developers', [])
+        if not isinstance(new_developer_ids, list):
             return Response({
                 "status": "error",
-                "message": "Failed to update developers due to invalid data.",
-                "errors": serializer.errors
+                "message": "Invalid data format. 'developers' should be a list of developer IDs."
             }, status=status.HTTP_400_BAD_REQUEST)
+
+        existing_developer_ids = list(project.developers.values_list('id', flat=True))
+        all_developer_ids = list(set(existing_developer_ids + new_developer_ids))
+
+        # Validate all developer IDs
+        valid_developers = CustomUser.objects.filter(id__in=all_developer_ids, admin_role=False)
+        if len(valid_developers) != len(all_developer_ids):
+            return Response({
+                "status": "error",
+                "message": "Some developer IDs are invalid or not developers."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Update developers
+        project.developers.set(valid_developers)
+        project.save()
+
+        return Response({
+            "status": "success",
+            "message": "Developers updated successfully.",
+            "data": UpdateDevelopersSerializer(project).data
+        }, status=status.HTTP_200_OK)
         
 class ProjectUpdateView(generics.UpdateAPIView):
     
@@ -211,33 +290,24 @@ class RemoveDeveloperView(generics.UpdateAPIView):
 
 
 
-class TaskAssignView(generics.CreateAPIView):
+class TaskAssignView(generics.UpdateAPIView):
     queryset = Task.objects.all()
     serializer_class = TaskSerializer
     permission_classes = [IsAuthenticated]
+    lookup_field = 'id'  # Custom lookup field
 
     def perform_create(self, serializer):
-        project_id = self.kwargs.get('project_id')  # Assuming 'project_id' is passed in the URL
-        project = get_object_or_404(Project, id=project_id)
+        task = self.get_object()
+        project = task.project
 
         if self.request.user != project.manager:
             raise PermissionDenied("You are not authorized to assign tasks in this project.")
 
-        # Additional validation can be added here as needed
-        # For example, checking if the developer is part of the project's team
         developer_id = serializer.validated_data.get('developer').id
         if developer_id not in project.developers.values_list('id', flat=True):
             return Response({
                 "error": "Developer is not part of this project's team."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer.save(project=project)
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
-            self.perform_create(serializer)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        else:
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.save()
 

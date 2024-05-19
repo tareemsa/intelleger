@@ -18,6 +18,13 @@ class UserSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = ['id', 'username','email']  # Assuming username is used as the display name
 
+   
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = ['id', 'username','email']  # Assuming username is used as the display name
+
 
 
 class TaskSerializer(serializers.ModelSerializer):
@@ -47,3 +54,15 @@ class TaskSerializer(serializers.ModelSerializer):
         if value > project.deadline:
             raise serializers.ValidationError("Task deadline cannot exceed the project's deadline.")
         return value
+
+class TaskAssignSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Task
+        fields = ['developer']
+
+class UpdateDevelopersSerializer(serializers.ModelSerializer):
+    developers = serializers.PrimaryKeyRelatedField(many=True, queryset=CustomUser.objects.filter(admin_role=False))
+
+    class Meta:
+        model = Project
+        fields = ['developers'] 
