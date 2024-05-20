@@ -1,6 +1,7 @@
 from rest_framework import status, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework import serializers
 from .serializers import UserRegistrationSerializer, PasswordResetRequestSerializer, PasswordResetSerializer
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
@@ -35,7 +36,7 @@ class UserRegistrationView(APIView):
                 return Response({
                     'message': 'User registered successfully. Please check your email to verify your account.'
                 }, status=status.HTTP_201_CREATED)
-            except serializer.ValidationError as e:
+            except serializers.ValidationError as e:
                 return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

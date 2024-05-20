@@ -5,11 +5,10 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.utils import timezone
 import datetime
-import secrets
 from django.contrib.auth import get_user_model, authenticate
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+import secrets
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
-
 
 User = get_user_model()
 
@@ -24,6 +23,9 @@ def send_verification_email(user):
         fail_silently=False,
     )
 
+
+
+
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True, required=True)
@@ -31,11 +33,11 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['username', 'password', 'password2', 'email', 'admin_role']
+        fields = ['first_name', 'last_name', 'password', 'password2', 'email', 'admin_role']
 
     def validate(self, attrs):
         if attrs['password'] != attrs['password2']:
-            raise serializers.ValidationError({"password": "Passwords must match."})
+            raise serializers.ValidationError({"password": "Passwords must match"})
         if User.objects.filter(email=attrs['email']).exists():
             raise serializers.ValidationError({"email": "This email is already registered."})
         return attrs
@@ -43,7 +45,8 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop('password2')
         user = User(
-            username=validated_data['username'],
+            first_name=validated_data['first_name'],
+            last_name=validated_data['last_name'],
             email=validated_data['email'],
             admin_role=validated_data.get('admin_role', False),
             is_active=False  # User should not be active until their email is verified
@@ -56,8 +59,8 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             send_verification_email(user)
             return user
         except Exception as e:
-            # Handle exceptions related to email sending or database issues
             raise serializers.ValidationError({"email": "Failed to send verification email, please try again."})
+
 
 class PasswordResetRequestSerializer(serializers.Serializer):
     email = serializers.EmailField()

@@ -1,16 +1,19 @@
-from django.contrib.auth.backends import ModelBackend
+from django.contrib.auth.backends import BaseBackend
 from django.contrib.auth import get_user_model
-from django.db.models import Q
 
-class EmailBackend(ModelBackend):
+User = get_user_model()
+
+class EmailBackend(BaseBackend):
     def authenticate(self, request, username=None, password=None, **kwargs):
-        UserModel = get_user_model()
         try:
-            # Try to fetch the user by searching the email field
-            user = UserModel.objects.get(Q(email__iexact=username))
+            user = User.objects.get(email=username)
             if user.check_password(password):
                 return user
-        except UserModel.DoesNotExist:
-            # Return None if no user is found
-            UserModel().set_password(password)  # This is done to mitigate timing attacks
-        return None
+        except User.DoesNotExist:
+            return None
+
+    def get_user(self, user_id):
+        try:
+            return User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return None
