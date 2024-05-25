@@ -2,87 +2,69 @@ from rest_framework import status,views
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from .models import Project,Task
-from .serializers import ProjectSerializer,UserSerializer,TaskSerializer,UpdateDevelopersSerializer
+from .serializers import ProjectSerializer,UserSerializer,TaskSerializer
 from .permissions import IsAdminUser  # Make sure to import the custom permission
-from rest_framework import generics,permissions
+from rest_framework import generics,permissions,serializers
 from .models import CustomUser
 from rest_framework.permissions import IsAuthenticated
 from django.http import Http404
-from rest_framework.exceptions import PermissionDenied
-from django.shortcuts import get_object_or_404
-from django.core.exceptions import ValidationError
-from .ai_service import generate_ai_requirements  # AI service integration
-
-
-class ProjectCreateView(generics.CreateAPIView):
-    queryset = Project.objects.all()
-    serializer_class = ProjectSerializer
-    permission_classes = [IsAuthenticated, IsAdminUser]
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-        headers = self.get_success_headers(serializer.data)
-
-        # Retrieve the project instance and scope from the serializer
-        project = serializer.instance
-        scope = serializer.validated_data['scope']
-
-        # Generate AI requirements using the scope
-        ai_requirements = generate_ai_requirements(scope)
-
-        # Build the response data including project details and AI requirements
-        response_data = {
-            "project": ProjectSerializer(project, context={'request': request}).data,
-            "ai_requirements": ai_requirements
-        }
-
-        return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
         
+from rest_framework.exceptions import PermissionDenied,NotFound
+from django.shortcuts import get_object_or_404
+from django.core.exceptions import ValidationError, ObjectDoesNotExist
+from .ai_service import generate_requirements # AI service integration
+
+#########################PROJECT#########################
+
+class ProjectCreateView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+    def post(self, request):
+        project_serializer = ProjectSerializer(data=request.data, context={'request': request})
+        if project_serializer.is_valid():
+            project = project_serializer.save()
+
+            functional_requirements, non_functional_requirements = generate_requirements(project.scope)
+            response_data = {
+                "project": project_serializer.data,
+                "functional_requirements": functional_requirements,
+                "non_functional_requirements": non_functional_requirements,
+            }
+            return Response(response_data, status=status.HTTP_201_CREATED)
+        return Response(project_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 class AcceptAIRequirementsView(APIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = TaskSerializer
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+    def post(self, request, project_id):
+        try:
+            project = Project.objects.get(id=project_id)
+        except Project.DoesNotExist:
+            return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    def post(self, request, *args, **kwargs):
-        project_id = request.data.get('project_id')
-        ai_requirements = request.data.get('ai_requirements', [])
+        functional_requirements = request.data.get('functional_requirements', [])
 
-        project = Project.objects.get(pk=project_id)  # Handle DoesNotExist in production
+        for fr in functional_requirements:
+            Task.objects.create(project=project, title=fr)
 
-        for req in ai_requirements['functional_requirements']:
-            Task.objects.create(
-                project=project,
-                description=req['description'],
-                status='Pending',
-                deadline=req['deadline']  # Now using the deadline provided in the request
-            )
-
-        return Response({"message": "Tasks created from AI requirements."})
-
-
+        return Response({"message": "Tasks created successfully"}, status=status.HTTP_200_OK)
 
 class EditAndSaveRequirementsView(APIView):
-    permission_classes = [IsAuthenticated]
-    permission_classes = [IsAuthenticated, IsAdminUser]
-    def post(self, request, *args, **kwargs):
-        project_id = request.data.get('project_id')
-        edited_requirements = request.data.get('edited_requirements', [])
+    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+    def post(self, request, project_id):
+        try:
+            project = Project.objects.get(id=project_id)
+        except Project.DoesNotExist:
+            return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        project = Project.objects.get(pk=project_id)  # Handle DoesNotExist in production
-        Task.objects.filter(project=project).delete()  # Clear previous AI tasks if any
-        for req in edited_requirements:
-            Task.objects.create(
-                project=project,
-                description=req['description'],
-                status='Pending',
-                deadline=req['deadline']  # Now using the deadline provided in the request
-            )    
-            
-        return Response({"message": "Edited tasks saved."})
+        functional_requirements = request.data.get('functional_requirements', [])
 
-###############################
+        # Here you can add logic to validate the edited requirements if needed
+        # Save tasks based on edited functional requirements
+        for fr in functional_requirements:
+            Task.objects.create(project=project, title=fr)
+
+        return Response({"message": "Tasks created successfully"}, status=status.HTTP_200_OK)
+
+
 
 class ProjectListView(generics.ListAPIView):
     serializer_class = ProjectSerializer
@@ -91,6 +73,11 @@ class ProjectListView(generics.ListAPIView):
     def get_queryset(self):
         # Filter projects to only those owned by the current user
         return Project.objects.filter(manager=self.request.user)
+
+
+
+
+
 
 class ProjectDetailView(generics.RetrieveAPIView):
     #queryset = Project.objects.all()
@@ -138,7 +125,7 @@ class ProjectDevelopersListView(generics.ListAPIView):
 
 class ProjectAssignDevelopersView(generics.UpdateAPIView):
     queryset = Project.objects.all()
-    serializer_class = UpdateDevelopersSerializer
+    serializer_class = ProjectSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
@@ -184,7 +171,7 @@ class ProjectAssignDevelopersView(generics.UpdateAPIView):
         return Response({
             "status": "success",
             "message": "Developers updated successfully.",
-            "data": UpdateDevelopersSerializer(project).data
+            "data": ProjectSerializer(project).data
         }, status=status.HTTP_200_OK)
         
 class ProjectUpdateView(generics.UpdateAPIView):
@@ -288,26 +275,151 @@ class RemoveDeveloperView(generics.UpdateAPIView):
 
         return Response({'message': 'Developers removed successfully'}, status=status.HTTP_200_OK)
 
+class ListTasksForProjectView(generics.ListAPIView):
+    serializer_class = TaskSerializer
+    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
 
+    def get_queryset(self):
+        project_id = self.kwargs.get('project_id')
+        try:
+            project = Project.objects.get(id=project_id)
+        except Project.DoesNotExist:
+            raise NotFound(detail="Project not found.")
 
-class TaskAssignView(generics.UpdateAPIView):
+        if project.manager != self.request.user:
+            raise PermissionDenied(detail="You do not have permission to view tasks for this project.")
+
+        return Task.objects.filter(project=project)
+
+#########################TASK#########################
+
+class CreateTaskView(generics.CreateAPIView):
     queryset = Task.objects.all()
     serializer_class = TaskSerializer
-    permission_classes = [IsAuthenticated]
-    lookup_field = 'id'  # Custom lookup field
+    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
 
     def perform_create(self, serializer):
-        task = self.get_object()
-        project = task.project
+        project_id = self.kwargs.get('project_id')
+        
+        try:
+            project = Project.objects.get(id=project_id, manager=self.request.user)
+        except Project.DoesNotExist:
+            raise NotFound(detail="Project not found or you do not have permission to create tasks for this project.")
+        
+        serializer.save(project=project)
 
-        if self.request.user != project.manager:
-            raise PermissionDenied("You are not authorized to assign tasks in this project.")
-
-        developer_id = serializer.validated_data.get('developer').id
-        if developer_id not in project.developers.values_list('id', flat=True):
+    def create(self, request, *args, **kwargs):
+        try:
+            super().create(request, *args, **kwargs)
             return Response({
-                "error": "Developer is not part of this project's team."
+                'status': 'success',
+                'message': 'Task created successfully'
+            }, status=status.HTTP_201_CREATED)
+        except serializers.ValidationError as e:
+            return Response({
+                'status': 'error',
+                'message': e.detail
             }, status=status.HTTP_400_BAD_REQUEST)
+        
+class AssignDevelopersToTaskView(APIView):
 
-        serializer.save()
+    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+
+    def post(self, request, project_id, task_id):
+        try:
+            project = Project.objects.get(id=project_id, manager=request.user)
+            task = Task.objects.get(id=task_id, project=project)
+        except Project.DoesNotExist:
+            return Response({"detail": "Project not found or you do not have permission."}, status=404)
+        except Task.DoesNotExist:
+            return Response({"detail": "Task not found in this project."}, status=404)
+
+        developer_ids_to_add = request.data.get('developers', [])
+        developers_to_add = CustomUser.objects.filter(id__in=developer_ids_to_add)
+        
+        for developer in developers_to_add:
+            if developer not in project.developers.all():
+                raise ValidationError(f"Developer {developer.username} is not assigned to this project.")
+        
+        task.developers.add(*developer_ids_to_add)
+        task.save()
+
+        return Response(TaskSerializer(task).data)
+
+class RemoveDevelopersFromTaskView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+
+    def post(self, request, project_id, task_id):
+        try:
+            project = Project.objects.get(id=project_id, manager=request.user)
+            task = Task.objects.get(id=task_id, project=project)
+        except Project.DoesNotExist:
+            return Response({"detail": "Project not found or you do not have permission."}, status=404)
+        except Task.DoesNotExist:
+            return Response({"detail": "Task not found in this project."}, status=404)
+
+        developer_ids_to_remove = request.data.get('developers', [])
+        
+        task.developers.remove(*developer_ids_to_remove)
+        task.save()
+
+        return Response(TaskSerializer(task).data)
+
+
+class EditTaskView(generics.UpdateAPIView):
+    queryset = Task.objects.all()
+    serializer_class = TaskSerializer
+    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+    lookup_field = 'id'
+    lookup_url_kwarg = 'task_id'  # Map the URL parameter 'task_id' to the 'id' field in the Task model
+
+    def get_queryset(self):
+        project_id = self.kwargs['project_id']
+        return Task.objects.filter(project__id=project_id, project__manager=self.request.user)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        
+        return Response({
+            'status': 'success',
+            'message': 'Task updated successfully',
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
+
+class DeleteTaskView(generics.DestroyAPIView):
+
+    queryset = Task.objects.all()
+    serializer_class = TaskSerializer
+    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+    lookup_field = 'id'
+    lookup_url_kwarg = 'task_id'
+
+    def get_queryset(self):
+        project_id = self.kwargs['project_id']
+        # Ensures that only tasks from the specified project managed by the current user are considered for deletion
+        return Task.objects.filter(project__id=project_id, project__manager=self.request.user)
+
+    def get_object(self):
+        queryset = self.get_queryset()
+        try:
+            obj = queryset.get(id=self.kwargs[self.lookup_url_kwarg])
+        except Task.DoesNotExist:
+            raise NotFound(detail="Task not found.")
+        return obj
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.project.manager != request.user:
+            raise PermissionDenied(detail="You do not have permission to delete this task.")
+        self.perform_destroy(instance)
+        return Response({
+            'status': 'success',
+            'message': 'Task has been successfully deleted.'
+        }, status=status.HTTP_200_OK)
+
+
 
