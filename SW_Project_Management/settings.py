@@ -30,8 +30,17 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 
 ALLOWED_HOSTS = []
 
+ASGI_APPLICATION = 'sw_project_management.asgi.application'
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [('127.0.0.1', 6379)],
+        },
+    },
+}
 
-# Application definition
+
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -43,7 +52,11 @@ INSTALLED_APPS = [
     'rest_framework',
     'accounts',
     'rest_framework_simplejwt.token_blacklist',
-    'manager'
+    'manager',
+    'channels',
+    'notifications',
+    'developer',
+    'corsheaders',
     
 ]
 
@@ -67,17 +80,32 @@ REST_FRAMEWORK = {
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),  # Access tokens are valid for 30 minutes
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),     # Refresh tokens are valid for 1 day
-    'ROTATE_REFRESH_TOKENS': False,                  # Whether to rotate refresh tokens upon each request
-    'BLACKLIST_AFTER_ROTATION': True,                # Whether to blacklist the old tokens after rotation
-    'ALGORITHM': 'HS256',                            # The signing algorithm for the token
-    'SIGNING_KEY': SECRET_KEY,                       # The key used to sign the tokens, usually the same as your Django SECRET_KEY
-    'VERIFYING_KEY': None,                           # Key for verifying the token signature; not needed if the same as SIGNING_KEY
-    'AUTH_HEADER_TYPES': ('Bearer',),                # The type of the token, Bearer is most common
-    'USER_ID_FIELD': 'id',                           # The field in the user model that represents the user ID
-    'USER_ID_CLAIM': 'user_id',                      # The claim in the token data that represents the user ID
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'UPDATE_LAST_LOGIN': False,
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'VERIFYING_KEY': None,
+    'AUDIENCE': None,
+    'ISSUER': None,
+    'JWK_URL': None,
+    'LEEWAY': 0,
+
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+    'USER_AUTHENTICATION_RULE': 'rest_framework_simplejwt.authentication.default_user_authentication_rule',
+
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+    'TOKEN_TYPE_CLAIM': 'token_type',
+    'JTI_CLAIM': 'jti',
+
+    'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
+    'SLIDING_TOKEN_LIFETIME': timedelta(minutes=60),
+    'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
 }
 
 
@@ -90,7 +118,9 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware'
 ]
+CORS_ORIGIN_ALLOW_ALL = True
 
 ROOT_URLCONF = 'SW_Project_Management.urls'
 
@@ -169,3 +199,6 @@ AUTHENTICATION_BACKENDS = [
     'accounts.authentication.EmailBackend',  # Use your app name and the correct path
     'django.contrib.auth.backends.ModelBackend',  # Optional, to keep the default backend
 ]
+
+
+

@@ -8,47 +8,65 @@ from rest_framework import generics,permissions,serializers
 from .models import CustomUser
 from rest_framework.permissions import IsAuthenticated
 from django.http import Http404
-        
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync       
 from rest_framework.exceptions import PermissionDenied,NotFound
 from django.shortcuts import get_object_or_404
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
-from .ai_service import generate_requirements # AI service integration
+from .ai_service import generate_requirements,evaluate_risk_level # AI service integration
 
 #########################PROJECT#########################
 
+ # AI service integration
+
 class ProjectCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+    
     def post(self, request):
         project_serializer = ProjectSerializer(data=request.data, context={'request': request})
         if project_serializer.is_valid():
             project = project_serializer.save()
 
+            # Generate requirements
             functional_requirements, non_functional_requirements = generate_requirements(project.scope)
+            
+            # Save the generated requirements in the project instance
+            project.functional_requirements = functional_requirements
+            project.non_functional_requirements = non_functional_requirements
+            project.save()
+
             response_data = {
                 "project": project_serializer.data,
                 "functional_requirements": functional_requirements,
                 "non_functional_requirements": non_functional_requirements,
             }
             return Response(response_data, status=status.HTTP_201_CREATED)
+        
         return Response(project_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class AcceptAIRequirementsView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+
     def post(self, request, project_id):
         try:
             project = Project.objects.get(id=project_id)
         except Project.DoesNotExist:
             return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        functional_requirements = request.data.get('functional_requirements', [])
+        functional_requirements = project.functional_requirements  # Use saved requirements
 
         for fr in functional_requirements:
             Task.objects.create(project=project, title=fr)
 
         return Response({"message": "Tasks created successfully"}, status=status.HTTP_200_OK)
+
+
+# views.py
 
 class EditAndSaveRequirementsView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+
     def post(self, request, project_id):
         try:
             project = Project.objects.get(id=project_id)
@@ -56,13 +74,20 @@ class EditAndSaveRequirementsView(APIView):
             return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
 
         functional_requirements = request.data.get('functional_requirements', [])
+        non_functional_requirement = request.data.get('non_functional_requirements', [])
 
-        # Here you can add logic to validate the edited requirements if needed
-        # Save tasks based on edited functional requirements
+        # Validate and save the edited requirements
+        project.edited_functional_requirements = functional_requirements
+        project.edited_non_functional_requirements = non_functional_requirement
+        project.save()
+
+        # Update tasks based on edited functional requirements
+        Task.objects.filter(project=project).delete()  # Clear existing tasks
         for fr in functional_requirements:
             Task.objects.create(project=project, title=fr)
 
         return Response({"message": "Tasks created successfully"}, status=status.HTTP_200_OK)
+
 
 
 
@@ -344,7 +369,20 @@ class AssignDevelopersToTaskView(APIView):
         task.developers.add(*developer_ids_to_add)
         task.save()
 
+        # Trigger notifications for assigned developers
+        channel_layer = get_channel_layer()
+        for developer in developers_to_add:
+            async_to_sync(channel_layer.group_send)(
+                f"notifications_{developer.id}",
+                {
+                    'type': 'send_notification',
+                    'message': f'You have been assigned a new task: {task.title}.'
+                }
+            )
+
         return Response(TaskSerializer(task).data)
+ 
+
 
 class RemoveDevelopersFromTaskView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]
@@ -420,6 +458,70 @@ class DeleteTaskView(generics.DestroyAPIView):
             'status': 'success',
             'message': 'Task has been successfully deleted.'
         }, status=status.HTTP_200_OK)
+
+#############risk_level########3
+# views.py
+
+class EvaluateRiskLevelView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+
+    def post(self, request, project_id):
+        try:
+            project = Project.objects.get(id=project_id)
+        except Project.DoesNotExist:
+            return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Get the additional risk evaluation fields from the request payload
+        project_category = request.data.get('project_category')
+        requirement_category = request.data.get('requirement_category')
+        risk_target_category = request.data.get('risk_target_category')
+        probability = request.data.get('probability')
+        magnitude_of_risk = request.data.get('magnitude_of_risk')
+        impact = request.data.get('impact')
+        dimension_of_risk = request.data.get('dimension_of_risk')
+        affecting_no_of_modules = request.data.get('affecting_no_of_modules')
+        fixing_duration_days = request.data.get('fixing_duration_days')
+        fix_cost_percent = request.data.get('fix_cost_percent')
+        priority = request.data.get('priority')
+
+        # Ensure all necessary fields are provided
+        required_fields = [
+            project_category, requirement_category, risk_target_category, probability,
+            magnitude_of_risk, impact, dimension_of_risk, affecting_no_of_modules,
+            fixing_duration_days, fix_cost_percent, priority
+        ]
+        if any(field is None for field in required_fields):
+            return Response({"error": "Missing required fields in the request payload."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Use the edited requirements if available, otherwise use the original
+        functional_requirements = project.edited_functional_requirements or project.functional_requirements
+        non_functional_requirements = project.edited_non_functional_requirements or project.non_functional_requirements
+
+        # Combine functional and non-functional requirements
+        all_requirements = functional_requirements + non_functional_requirements
+
+        # Prepare input data for the evaluate_risk_level function
+        input_data = {
+            "requirements": all_requirements,
+            "project_category": project_category,
+            "requirement_category": requirement_category,
+            "risk_target_category": risk_target_category,
+            "probability": probability,
+            "magnitude_of_risk": magnitude_of_risk,
+            "impact": impact,
+            "dimension_of_risk": dimension_of_risk,
+            "affecting_no_of_modules": affecting_no_of_modules,
+            "fixing_duration_days": fixing_duration_days,
+            "fix_cost_percent": fix_cost_percent,
+            "priority": priority
+        }
+
+        # Evaluate risk level using the placeholder AI function
+        risk_level = evaluate_risk_level(input_data)
+
+        # Return the risk level as response
+        return Response({"risk_level": risk_level}, status=status.HTTP_200_OK)
+
 
 
 

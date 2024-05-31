@@ -2,7 +2,7 @@ from rest_framework import status, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import serializers
-from .serializers import UserRegistrationSerializer, PasswordResetRequestSerializer, PasswordResetSerializer
+from .serializers import UserRegistrationSerializer, PasswordResetRequestSerializer, PasswordResetSerializer,UserUpdateSerializer
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
@@ -15,13 +15,18 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
 from datetime import timedelta
 from .serializers import  send_verification_email
-
-
-
+from rest_framework import generics
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.permissions import AllowAny
 import secrets
-
 from .serializers import CustomTokenObtainPairSerializer
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status, permissions
+from django.core.exceptions import ObjectDoesNotExist
+from .serializers import UserUpdateSerializer
+from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
@@ -39,6 +44,9 @@ class UserRegistrationView(APIView):
             except serializers.ValidationError as e:
                 return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
 
 class VerifyEmailView(APIView):
     def post(self, request):
@@ -58,6 +66,7 @@ class VerifyEmailView(APIView):
                 return Response({'error': 'Invalid verification code.'}, status=status.HTTP_400_BAD_REQUEST)
         except ObjectDoesNotExist:
             return Response({'error': 'Email not found.'}, status=status.HTTP_404_NOT_FOUND)
+
 
 class PasswordResetRequestView(APIView):
     permission_classes = [permissions.AllowAny]
@@ -156,3 +165,23 @@ class ResendVerificationCode(APIView):
 
 # Add the appropriate URL pattern to link this view
 
+class UserUpdateView(generics.UpdateAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserUpdateSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        if 'password' in request.data:
+            return Response({'message': 'Password updated successfully.'}, status=status.HTTP_200_OK)
+        elif 'username' in request.data:
+            return Response({'message': 'Username updated successfully.'}, status=status.HTTP_200_OK)
+        return Response({'message': 'User information updated successfully.'}, status=status.HTTP_200_OK)

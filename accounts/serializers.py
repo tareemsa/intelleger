@@ -44,12 +44,14 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data.pop('password2')
+        username = f"{validated_data['first_name']}{validated_data['last_name']}".replace(" ", "")
         user = User(
             first_name=validated_data['first_name'],
             last_name=validated_data['last_name'],
             email=validated_data['email'],
             admin_role=validated_data.get('admin_role', False),
-            is_active=False  # User should not be active until their email is verified
+            is_active=False, # User should not be active until their email is verified
+            username=username
         )
         user.set_password(validated_data['password'])
         user.verification_code = secrets.token_urlsafe(16)[:6]
@@ -132,6 +134,38 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'access': str(refresh.access_token),
             'email': user.email
         }
+
+class UserUpdateSerializer(serializers.ModelSerializer):
+    current_password = serializers.CharField(write_only=True, required=False)
+    password = serializers.CharField(write_only=True, required=False, validators=[validate_password])
+    password2 = serializers.CharField(write_only=True, required=False)
+
+    class Meta:
+        model = User
+        fields = ['username', 'current_password', 'password', 'password2']
+
+    def validate(self, attrs):
+        user = self.context['request'].user
+
+        # Check if password is being updated
+        if 'password' in attrs:
+            if not attrs.get('current_password'):
+                raise serializers.ValidationError({"current_password": "Current password is required to change the password"})
+            if not user.check_password(attrs['current_password']):
+                raise serializers.ValidationError({"current_password": "Current password is not correct"})
+            if attrs['password'] != attrs.get('password2'):
+                raise serializers.ValidationError({"password": "Passwords must match"})
+        
+        return attrs
+
+    def update(self, instance, validated_data):
+        if 'password' in validated_data:
+            instance.set_password(validated_data['password'])
+            validated_data.pop('password')
+            validated_data.pop('password2', None)
+        validated_data.pop('current_password', None)
+        return super().update(instance, validated_data)
+
 
 
 

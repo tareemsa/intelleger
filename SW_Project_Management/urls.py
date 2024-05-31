@@ -23,6 +23,7 @@ urlpatterns = [
     path('api/', include('accounts.urls')),
     #path('api/',include('project_management.urls')),
     path('api/',include('manager.urls')),
+    path('api/',include('developer.urls')),
 ]
 
 
