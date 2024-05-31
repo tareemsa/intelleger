@@ -132,7 +132,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return {
             'refresh': str(refresh),
             'access': str(refresh.access_token),
-            'email': user.email
+            'email': user.email,
+            'admin_role':user.admin_role
         }
 
 class UserUpdateSerializer(serializers.ModelSerializer):

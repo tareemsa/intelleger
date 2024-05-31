@@ -62,7 +62,6 @@ class AcceptAIRequirementsView(APIView):
         return Response({"message": "Tasks created successfully"}, status=status.HTTP_200_OK)
 
 
-# views.py
 
 class EditAndSaveRequirementsView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]
@@ -89,7 +88,7 @@ class EditAndSaveRequirementsView(APIView):
         return Response({"message": "Tasks created successfully"}, status=status.HTTP_200_OK)
 
 
-
+#view_all_projects
 
 class ProjectListView(generics.ListAPIView):
     serializer_class = ProjectSerializer
@@ -99,10 +98,7 @@ class ProjectListView(generics.ListAPIView):
         # Filter projects to only those owned by the current user
         return Project.objects.filter(manager=self.request.user)
 
-
-
-
-
+#view_project_details
 
 class ProjectDetailView(generics.RetrieveAPIView):
     #queryset = Project.objects.all()
@@ -113,6 +109,7 @@ class ProjectDetailView(generics.RetrieveAPIView):
         # Filter projects to only those owned by the current user
         return Project.objects.filter(manager=self.request.user)
 
+#view_project_developers
 class ProjectDevelopersListView(generics.ListAPIView):
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
@@ -147,7 +144,7 @@ class ProjectDevelopersListView(generics.ListAPIView):
         except Project.DoesNotExist:
             raise Http404("Project not found.")
 
-
+#assign_developer_to_project
 class ProjectAssignDevelopersView(generics.UpdateAPIView):
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
@@ -199,6 +196,7 @@ class ProjectAssignDevelopersView(generics.UpdateAPIView):
             "data": ProjectSerializer(project).data
         }, status=status.HTTP_200_OK)
         
+#update_project_details
 class ProjectUpdateView(generics.UpdateAPIView):
     
     serializer_class = ProjectSerializer
@@ -233,7 +231,7 @@ class ProjectUpdateView(generics.UpdateAPIView):
                 "message": "Failed to update the project due to invalid data.",
                 "errors": serializer.errors
             }, status=status.HTTP_400_BAD_REQUEST)
-
+#delete_project
 class ProjectDeleteView(generics.DestroyAPIView):
     
     serializer_class = ProjectSerializer
@@ -271,7 +269,7 @@ class ProjectDeleteView(generics.DestroyAPIView):
             }, status=status.HTTP_403_FORBIDDEN)
 
 
-
+#remov_developer_from_project
 class RemoveDeveloperView(generics.UpdateAPIView):
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
@@ -300,6 +298,7 @@ class RemoveDeveloperView(generics.UpdateAPIView):
 
         return Response({'message': 'Developers removed successfully'}, status=status.HTTP_200_OK)
 
+#view_project_tasks
 class ListTasksForProjectView(generics.ListAPIView):
     serializer_class = TaskSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]
@@ -346,6 +345,7 @@ class CreateTaskView(generics.CreateAPIView):
                 'message': e.detail
             }, status=status.HTTP_400_BAD_REQUEST)
         
+#asssign_task_to_developers 
 class AssignDevelopersToTaskView(APIView):
 
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]
