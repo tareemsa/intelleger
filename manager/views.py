@@ -369,16 +369,6 @@ class AssignDevelopersToTaskView(APIView):
         task.developers.add(*developer_ids_to_add)
         task.save()
 
-        # Trigger notifications for assigned developers
-        channel_layer = get_channel_layer()
-        for developer in developers_to_add:
-            async_to_sync(channel_layer.group_send)(
-                f"notifications_{developer.id}",
-                {
-                    'type': 'send_notification',
-                    'message': f'You have been assigned a new task: {task.title}.'
-                }
-            )
 
         return Response(TaskSerializer(task).data)
  
