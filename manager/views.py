@@ -7,9 +7,7 @@ from .permissions import IsAdminUser  # Make sure to import the custom permissio
 from rest_framework import generics,permissions,serializers
 from .models import CustomUser
 from rest_framework.permissions import IsAuthenticated
-from django.http import Http404
-from channels.layers import get_channel_layer
-from asgiref.sync import async_to_sync       
+from django.http import Http404    
 from rest_framework.exceptions import PermissionDenied,NotFound
 from django.shortcuts import get_object_or_404
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
