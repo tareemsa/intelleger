@@ -4,19 +4,33 @@ from .models import CustomUser
 from django.utils import timezone
 
 class ProjectSerializer(serializers.ModelSerializer):
-    developers = serializers.PrimaryKeyRelatedField(many=True, queryset=CustomUser.objects.filter(admin_role=False))
+    developers = serializers.SlugRelatedField(
+        many=True,
+        slug_field='email',
+        queryset=CustomUser.objects.filter(admin_role=False)
+    )
+
     class Meta:
         model = Project
-        fields = ['id', 'name', 'scope', 'deadline', 'developers','created_at', 'updated_at']
+        fields = ['id', 'name', 'scope', 'deadline', 'developers', 'created_at', 'updated_at']
 
     def create(self, validated_data):
-        # Assuming `self.context['request'].user` is the logged-in user
+        developer_emails = validated_data.pop('developers')
+        developers = CustomUser.objects.filter(email__in=developer_emails, admin_role=False)
+        
         validated_data['manager'] = self.context['request'].user
-        return super().create(validated_data) 
+        project = super().create(validated_data)
+        
+        project.developers.set(developers)
+        
+        return project
+
     def validate_deadline(self, value):
         if value < timezone.now():
             raise serializers.ValidationError("The deadline must be in the future.")
-        return value   
+        return value
+
+  
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:

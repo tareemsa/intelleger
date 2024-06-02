@@ -2,7 +2,7 @@ from rest_framework import status, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import serializers
-from .serializers import UserRegistrationSerializer, PasswordResetRequestSerializer, PasswordResetSerializer,UserUpdateSerializer
+from .serializers import UserRegistrationSerializer, PasswordResetRequestSerializer, PasswordResetSerializer
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
@@ -20,13 +20,15 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.permissions import AllowAny
 import secrets
 from .serializers import CustomTokenObtainPairSerializer
-
+from rest_framework.exceptions import NotAuthenticated, APIException
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
-from django.core.exceptions import ObjectDoesNotExist
-from .serializers import UserUpdateSerializer
+
+from .serializers import UsernameUpdateSerializer,PasswordUpdateSerializer
 from django.contrib.auth import get_user_model
+from .serializers import UserDetailSerializer
+from .models import CustomUser 
 
 User = get_user_model()
 
@@ -165,10 +167,10 @@ class ResendVerificationCode(APIView):
 
 # Add the appropriate URL pattern to link this view
 
-class UserUpdateView(generics.UpdateAPIView):
-    queryset = User.objects.all()
-    serializer_class = UserUpdateSerializer
-    permission_classes = [IsAuthenticated]
+class UsernameUpdateView(generics.UpdateAPIView):
+    queryset = CustomUser.objects.all()
+    serializer_class = UsernameUpdateSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_object(self):
         return self.request.user
@@ -179,9 +181,45 @@ class UserUpdateView(generics.UpdateAPIView):
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
+        return Response({'message': 'Username updated successfully.'}, status=status.HTTP_200_OK)
 
-        if 'password' in request.data:
-            return Response({'message': 'Password updated successfully.'}, status=status.HTTP_200_OK)
-        elif 'username' in request.data:
-            return Response({'message': 'Username updated successfully.'}, status=status.HTTP_200_OK)
-        return Response({'message': 'User information updated successfully.'}, status=status.HTTP_200_OK)
+
+
+class UserDetailView(generics.RetrieveAPIView):
+    serializer_class = UserDetailSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+    def get(self, request, *args, **kwargs):
+        try:
+            user = self.get_object()
+            serializer = self.get_serializer(user)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except NotAuthenticated:
+            return Response({"detail": "Authentication credentials were not provided."}, status=status.HTTP_401_UNAUTHORIZED)
+        except CustomUser.DoesNotExist:
+            return Response({"detail": "User does not exist."}, status=status.HTTP_404_NOT_FOUND)
+        except APIException as e:
+            return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as e:
+            return Response({"detail": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+class PasswordUpdateView(generics.UpdateAPIView):
+    queryset = CustomUser.objects.all()
+    serializer_class = PasswordUpdateSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response({'message': 'Password updated successfully.'}, status=status.HTTP_200_OK)
