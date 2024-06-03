@@ -31,14 +31,7 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 ALLOWED_HOSTS = []
 
 ASGI_APPLICATION = 'sw_project_management.asgi.application'
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            "hosts": [('127.0.0.1', 6379)],
-        },
-    },
-}
+
 
 
 
@@ -53,8 +46,6 @@ INSTALLED_APPS = [
     'accounts',
     'rest_framework_simplejwt.token_blacklist',
     'manager',
-    'channels',
-    'notifications',
     'developer',
     'corsheaders',
     

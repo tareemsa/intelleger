@@ -39,15 +39,15 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 
-from rest_framework import serializers
+
 
 class TaskSerializer(serializers.ModelSerializer):
-    developers = serializers.PrimaryKeyRelatedField(queryset=CustomUser.objects.all(), many=True)
+    developers = serializers.SlugRelatedField(slug_field='email', queryset=CustomUser.objects.all(), many=True)
 
     class Meta:
         model = Task
-        fields = ['id', 'title', 'description', 'developers', 'deadline', 'status', 'project']
-        read_only_fields = ['project']
+        fields = ['id', 'title', 'description', 'developers', 'status', 'project', 'start_time', 'end_time', 'manager_start_time', 'manager_end_time']
+        read_only_fields = ['project', 'start_time', 'end_time']
 
     def validate_developers(self, value):
         """
@@ -58,10 +58,10 @@ class TaskSerializer(serializers.ModelSerializer):
 
         for developer in value:
             if developer not in project.developers.all():
-                raise serializers.ValidationError(f"Developer {developer} is not assigned to this project.")
+                raise serializers.ValidationError(f"Developer {developer.email} is not assigned to this project.")
         return value
 
-    def validate_deadline(self, value):
+    def validate_end_time_m(self, value):
         """
         Ensure that the task deadline is not before the project's deadline.
         """
@@ -71,6 +71,7 @@ class TaskSerializer(serializers.ModelSerializer):
         if value > project.deadline:
             raise serializers.ValidationError("Task deadline cannot exceed the project's deadline.")
         return value
+
 
 
 

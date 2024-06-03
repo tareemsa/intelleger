@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import  AssignDevelopersToTaskView,EvaluateRiskLevelView,CreateTaskView,DeleteTaskView,AcceptAIRequirementsView,ProjectCreateView,ProjectListView,RemoveDeveloperView, ProjectDetailView, ProjectDevelopersListView, ProjectAssignDevelopersView,ProjectUpdateView,ProjectDeleteView,EditAndSaveRequirementsView,EditTaskView,RemoveDevelopersFromTaskView,ListTasksForProjectView
+from .views import  AssignDevelopersToTaskView,EvaluateRiskLevelView,TaskDetailForManagerView,CreateTaskView,DeleteTaskView,AcceptAIRequirementsView,ProjectCreateView,ProjectListView,RemoveDeveloperView, ProjectDetailView, ProjectDevelopersListView, ProjectAssignDevelopersView,ProjectUpdateView,ProjectDeleteView,EditAndSaveRequirementsView,EditTaskView,RemoveDevelopersFromTaskView,ListTasksForProjectView
 urlpatterns = [
     path('create_project/', ProjectCreateView.as_view(), name='project-create'),
     path('projects/<int:project_id>/accept-requirements/', AcceptAIRequirementsView.as_view(), name='accept-ai-requirements'),
@@ -18,6 +18,7 @@ urlpatterns = [
     path('projects/<int:project_id>/tasks/<int:task_id>/edit/', EditTaskView.as_view(), name='task-edit'),
     path('projects/<int:project_id>/tasks/<int:task_id>/remove_developers/', RemoveDevelopersFromTaskView.as_view(), name='remove_developers_from_task'),#Remove_developers_from_task
     path('projects/<int:project_id>/tasks/<int:task_id>/delete/', DeleteTaskView.as_view(), name='delete_task'),
+    path('task/<int:pk>/manager-details/', TaskDetailForManagerView.as_view(), name='manager-task-details'),
     ###########risk_level############
     path('evaluate-risk/<int:project_id>/', EvaluateRiskLevelView.as_view(), name='evaluate-risk'),
 ]

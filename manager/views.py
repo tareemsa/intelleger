@@ -345,8 +345,7 @@ class CreateTaskView(generics.CreateAPIView):
         
 #asssign_task_to_developers 
 class AssignDevelopersToTaskView(APIView):
-
-    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsAdminUser]
 
     def post(self, request, project_id, task_id):
         try:
@@ -357,18 +356,17 @@ class AssignDevelopersToTaskView(APIView):
         except Task.DoesNotExist:
             return Response({"detail": "Task not found in this project."}, status=404)
 
-        developer_ids_to_add = request.data.get('developers', [])
-        developers_to_add = CustomUser.objects.filter(id__in=developer_ids_to_add)
+        developer_emails = request.data.get('developers', [])
+        developers_to_add = CustomUser.objects.filter(email__in=developer_emails)
         
         for developer in developers_to_add:
             if developer not in project.developers.all():
-                raise ValidationError(f"Developer {developer.username} is not assigned to this project.")
-        
-        task.developers.add(*developer_ids_to_add)
+                return Response({"detail": f"Developer {developer.email} is not assigned to this project."}, status=400)
+
+        task.developers.set(developers_to_add)
         task.save()
 
-
-        return Response(TaskSerializer(task).data)
+        return Response(TaskSerializer(task).data, status=status.HTTP_200_OK)
  
 
 
@@ -513,3 +511,53 @@ class EvaluateRiskLevelView(APIView):
 
 
 
+# views.py
+
+from rest_framework import permissions, status
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from .models import Task
+
+class TaskDetailForManagerView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+
+    def get(self, request, pk):
+        try:
+            task = Task.objects.get(pk=pk, project__manager=request.user)
+        except Task.DoesNotExist:
+            return Response({"detail": "Task not found or you do not have permission to view it."}, status=status.HTTP_404_NOT_FOUND)
+
+        if task.status != 'completed':
+            return Response({'message': 'Task is not yet completed.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Ensure start_time and end_time are set
+        if task.start_time is None or task.end_time is None:
+            return Response({'message': 'Start time or end time is not set for this task.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Calculate time taken by the developer
+        actual_time_taken = task.end_time - task.start_time
+
+        # Ensure manager_end_time and manager_start_time are set
+        if task.manager_start_time is None or task.manager_end_time is None:
+            return Response({'message': 'Manager-assigned start time or end time is not set for this task.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Calculate allocated time based on manager's assigned start and end times
+        allocated_time = task.manager_end_time - task.manager_start_time
+
+        if actual_time_taken < allocated_time:
+            message = 'The task was completed earlier than the deadline.'
+        elif actual_time_taken == allocated_time:
+            message = 'The task was completed exactly on time.'
+        else:
+            message = 'The task was completed but exceeded the deadline.'
+
+        return Response({
+            'task_name': task.title,
+            'message': message,
+            'time_taken': str(actual_time_taken),
+            'allocated_time': str(allocated_time),
+            'start_time': task.start_time,
+            'end_time': task.end_time,
+            'manager_start_time': task.manager_start_time,
+            'manager_end_time': task.manager_end_time
+        }, status=status.HTTP_200_OK)

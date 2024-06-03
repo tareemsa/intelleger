@@ -1,4 +1,4 @@
-from rest_framework import generics, permissions
+from rest_framework import generics, permissions,status
 from manager.serializers import  TaskSerializer, ProjectSerializer
 from manager.models import Task, Project
 from rest_framework import generics
@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 from rest_framework.status import HTTP_200_OK
 from .models import ToDo
 from .serializers import ToDoSerializer
-
+from django.utils import timezone
 
 
 #list alll developer tasks 
@@ -43,19 +43,25 @@ class DeveloperProjectDetailView(generics.RetrieveAPIView):
 #change_task_status
 class StartTaskView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    serializer_class = TaskSerializer
     def post(self, request, pk):
-        task = Task.objects.get(pk=pk)
+        task = Task.objects.get(pk=pk, developers=request.user)
         task.status = 'in_progress'
+        task.start_time = timezone.now()  # Log start time
         task.save()
-        return Response({'task In_Progress.'},status=HTTP_200_OK)
+        return Response({'message': 'Task In Progress.'}, status=status.HTTP_200_OK)
 
 class CompleteTaskView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+
     def post(self, request, pk):
-        task = Task.objects.get(pk=pk)
-        task.status = 'done'
-        task.save()
-        return Response({'message': 'task completed '},status=HTTP_200_OK)
+        task = Task.objects.get(pk=pk, developers=request.user)
+        if task.status == 'in_progress':
+            task.status = 'completed'
+            task.end_time = timezone.now()  # Log end time
+            task.save()
+            return Response({'message': 'Task completed.'}, status=status.HTTP_200_OK)
+        return Response({'message': 'Task is not in progress.'}, status=status.HTTP_400_BAD_REQUEST)
 
 #generate_code 
 class GenerateCodeFromDescriptionView(APIView):

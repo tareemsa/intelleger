@@ -19,14 +19,34 @@ class Project(models.Model):
     def __str__(self):
         return self.name
 
+
+
 class Task(models.Model):
+    STATUS_CHOICES = [
+        ('not_started', 'Not Started'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+    ]
+
     title = models.CharField(max_length=200)
     description = models.TextField(null=True, blank=True)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='tasks')
     developers = models.ManyToManyField(CustomUser, related_name='assigned_tasks')
-    deadline = models.DateTimeField(null=True, blank=True)
-    status = models.CharField(max_length=50, default='pending')
+    #deadline = models.DateTimeField(null=True, blank=True)
+    manager_end_time=models.DateTimeField(null=True, blank=True)
+    manager_start_time = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=50, default='not_started', choices=STATUS_CHOICES)
+    start_time = models.DateTimeField(null=True, blank=True)
+    end_time = models.DateTimeField(null=True, blank=True)
     
+    def save(self, *args, **kwargs):
+        if self.status == 'in_progress' and self.start_time is None:
+            self.start_time = timezone.now()
+        if self.status == 'completed' and self.end_time is None:
+            self.end_time = timezone.now()
+        super(Task, self).save(*args, **kwargs)
+
     def __str__(self):
         return self.title
+
 
