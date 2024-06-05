@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.status import HTTP_200_OK
 from .models import ToDo
+from manager.models import DeveloperMetrics,Task
 from .serializers import ToDoSerializer
 from django.utils import timezone
 
@@ -95,3 +96,26 @@ class ToDoRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         return ToDo.objects.filter(developer=self.request.user)
 
+class RestartTaskView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            task = Task.objects.get(pk=pk, developer=request.user)
+        except Task.DoesNotExist:
+            return Response({'message': 'Task not found or you do not have permission to restart it.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if task.status == 'completed':
+            task.status = 'in_progress'
+            task.end_time = None  # Reset end time
+            task.start_time = timezone.now()  # Log new start time
+            task.save()
+
+            # Update developer KPIs
+            developer_metrics, created = DeveloperMetrics.objects.get_or_create(developer=task.developer)
+            developer_metrics.tasks_reassigned += 1
+            developer_metrics.save()
+
+            return Response({'message': 'Task returned to In Progress.'}, status=status.HTTP_200_OK)
+
+        return Response({'message': 'Task is not completed.'}, status=status.HTTP_400_BAD_REQUEST)

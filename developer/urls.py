@@ -2,7 +2,7 @@ from django.urls import path
 from .views import (
  
     DeveloperTaskListView,
-    DeveloperTaskDetailView, DeveloperProjectListView,ToDoRetrieveUpdateDestroyView ,ToDoListCreateView,GenerateCodeFromDescriptionView,DeveloperProjectDetailView,StartTaskView,CompleteTaskView
+    DeveloperTaskDetailView, DeveloperProjectListView,RestartTaskView,ToDoRetrieveUpdateDestroyView ,ToDoListCreateView,GenerateCodeFromDescriptionView,DeveloperProjectDetailView,StartTaskView,CompleteTaskView
 )
 
 urlpatterns = [
@@ -14,6 +14,7 @@ urlpatterns = [
     path('projects/<int:pk>/', DeveloperProjectDetailView.as_view(), name='developer-project-detail'),
     path('tasks/<int:pk>/start/', StartTaskView.as_view(), name='start-task'),
     path('tasks/<int:pk>/complete/', CompleteTaskView.as_view(), name='complete-task'),
+    path('tasks/<int:pk>/RestartTask/', RestartTaskView.as_view(), name='Restart-task'),
     path('generate_code/', GenerateCodeFromDescriptionView.as_view(), name='generate-code'),
     path('todos/', ToDoListCreateView.as_view(), name='todo-list-create'),
     path('todos/<int:pk>/', ToDoRetrieveUpdateDestroyView.as_view(), name='todo-retrieve-update-destroy'),

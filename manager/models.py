@@ -31,13 +31,14 @@ class Task(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField(null=True, blank=True)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='tasks')
-    developers = models.ManyToManyField(CustomUser, related_name='assigned_tasks')
+    developer = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='assigned_tasks',null=True)
     #deadline = models.DateTimeField(null=True, blank=True)
     manager_end_time=models.DateTimeField(null=True, blank=True)
     manager_start_time = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=50, default='not_started', choices=STATUS_CHOICES)
     start_time = models.DateTimeField(null=True, blank=True)
     end_time = models.DateTimeField(null=True, blank=True)
+    actual_time_spent = models.DurationField(null=True, blank=True)
     
     def save(self, *args, **kwargs):
         if self.status == 'in_progress' and self.start_time is None:
@@ -50,3 +51,10 @@ class Task(models.Model):
         return self.title
 
 
+class DeveloperMetrics(models.Model):
+    developer = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='metrics')
+    tasks_completed = models.IntegerField(default=0)
+    average_completion_time = models.DurationField(null=True, blank=True)
+    tasks_reassigned = models.IntegerField(default=0)
+    total_delivery_time = models.DurationField(null=True, blank=True)
+    total_allocated_time = models.DurationField(null=True, blank=True)

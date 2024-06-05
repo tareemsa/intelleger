@@ -1,7 +1,7 @@
 from rest_framework import status,views
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from .models import Project,Task
+from .models import Project,Task,DeveloperMetrics
 from .serializers import ProjectSerializer,UserSerializer,TaskSerializer
 from .permissions import IsAdminUser  # Make sure to import the custom permission
 from rest_framework import generics,permissions,serializers
@@ -12,7 +12,7 @@ from rest_framework.exceptions import PermissionDenied,NotFound
 from django.shortcuts import get_object_or_404
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from .ai_service import generate_requirements,evaluate_risk_level # AI service integration
-
+from django.db.models import Count, Avg,Sum, F, ExpressionWrapper, DurationField
 #########################PROJECT#########################
 
  # AI service integration
@@ -165,23 +165,23 @@ class ProjectAssignDevelopersView(generics.UpdateAPIView):
     def patch(self, request, *args, **kwargs):
         project = self.get_object()  # This checks permission and raises Http404 if not found or PermissionDenied if not allowed
 
-        # Merge new developers with existing developers
-        new_developer_ids = request.data.get('developers', [])
-        if not isinstance(new_developer_ids, list):
+        new_developer_emails = request.data.get('developers', [])
+        developers_to_add = CustomUser.objects.filter(email__in=new_developer_emails)
+        if not isinstance(new_developer_emails, list):
             return Response({
                 "status": "error",
-                "message": "Invalid data format. 'developers' should be a list of developer IDs."
+                "message": "Invalid data format. 'developers' should be a list of developer em."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        existing_developer_ids = list(project.developers.values_list('id', flat=True))
-        all_developer_ids = list(set(existing_developer_ids + new_developer_ids))
+        existing_developer_email = list(project.developers.values_list('email', flat=True))
+        all_developer_email = list(set(existing_developer_email + new_developer_emails))
 
         # Validate all developer IDs
-        valid_developers = CustomUser.objects.filter(id__in=all_developer_ids, admin_role=False)
-        if len(valid_developers) != len(all_developer_ids):
+        valid_developers = CustomUser.objects.filter(email__in=all_developer_email, admin_role=False)
+        if len(valid_developers) != len(all_developer_email):
             return Response({
                 "status": "error",
-                "message": "Some developer IDs are invalid or not developers."
+                "message": "Some developer email's are invalid or not developers."
             }, status=status.HTTP_400_BAD_REQUEST)
 
         # Update developers
@@ -267,34 +267,34 @@ class ProjectDeleteView(generics.DestroyAPIView):
             }, status=status.HTTP_403_FORBIDDEN)
 
 
-#remov_developer_from_project
+
+
+
 class RemoveDeveloperView(generics.UpdateAPIView):
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
 
-    def patch(self, request, *args, **kwargs):
+    def delete(self, request, *args, **kwargs):
         project = self.get_object()  # Gets the project instance based on URL parameter 'pk'
 
-        # Retrieve developer IDs from request data
-        developer_ids = request.data.get('developers', [])
-        if not developer_ids:
+        # Retrieve developer emails from request data
+        developer_emails = request.data.get('developers', [])
+        if not developer_emails:
             return Response({'error': 'No developers specified'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Filter developers who are actually part of this project
-        developers_to_remove = project.developers.filter(id__in=developer_ids)
+        developers_to_remove = project.developers.filter(email__in=developer_emails)
 
         if not developers_to_remove:
             return Response({'error': 'No valid developers found to remove'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Remove the developers
-        project.developers.remove(*developers_to_remove)
-
-        # Optionally, you can return the updated project data
-        # project = self.get_object()  # Refresh the instance to reflect the removal
-        # serializer = self.get_serializer(project)
-        # return Response(serializer.data)
+        # Remove the specified developers from the project
+        for developer in developers_to_remove:
+            project.developers.remove(developer)
 
         return Response({'message': 'Developers removed successfully'}, status=status.HTTP_200_OK)
+
+
 
 #view_project_tasks
 class ListTasksForProjectView(generics.ListAPIView):
@@ -328,22 +328,30 @@ class CreateTaskView(generics.CreateAPIView):
         except Project.DoesNotExist:
             raise NotFound(detail="Project not found or you do not have permission to create tasks for this project.")
         
-        serializer.save(project=project)
+        # Get the developer's email from the request data
+        developer_email = self.request.data.get('developer')
+        try:
+            # Retrieve the developer object based on the email
+            developer = CustomUser.objects.get(email=developer_email)
+        except CustomUser.DoesNotExist:
+            raise ValidationError({'developer': ['No developer found with this email.']})
+        
+        # Save the task with the project and developer
+        serializer.save(project=project, developer=developer)
 
     def create(self, request, *args, **kwargs):
-        try:
-            super().create(request, *args, **kwargs)
+        response = super().create(request, *args, **kwargs)
+        if response.status_code == status.HTTP_201_CREATED:
             return Response({
                 'status': 'success',
                 'message': 'Task created successfully'
             }, status=status.HTTP_201_CREATED)
-        except serializers.ValidationError as e:
-            return Response({
-                'status': 'error',
-                'message': e.detail
-            }, status=status.HTTP_400_BAD_REQUEST)
+        return response
+        #############################################################################################
+
+ 
         
-#asssign_task_to_developers 
+        ############################################################################################
 class AssignDevelopersToTaskView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
@@ -356,38 +364,32 @@ class AssignDevelopersToTaskView(APIView):
         except Task.DoesNotExist:
             return Response({"detail": "Task not found in this project."}, status=404)
 
-        developer_emails = request.data.get('developers', [])
-        developers_to_add = CustomUser.objects.filter(email__in=developer_emails)
+        developer_email = request.data.get('developer', None)
         
-        for developer in developers_to_add:
-            if developer not in project.developers.all():
-                return Response({"detail": f"Developer {developer.email} is not assigned to this project."}, status=400)
+        if not developer_email:
+            return Response({"detail": "No developer provided to assign to the task."}, status=400)
 
-        task.developers.set(developers_to_add)
+        developer = CustomUser.objects.filter(email=developer_email).first()
+
+        if not developer:
+            return Response({"detail": f"Developer with email {developer_email} not found."}, status=400)
+
+        if developer not in project.developers.all():
+            return Response({"detail": f"Developer {developer_email} is not assigned to this project."}, status=400)
+
+        task.developer = developer
         task.save()
 
         return Response(TaskSerializer(task).data, status=status.HTTP_200_OK)
+
+
+
+
  
 
 
-class RemoveDevelopersFromTaskView(APIView):
-    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
 
-    def post(self, request, project_id, task_id):
-        try:
-            project = Project.objects.get(id=project_id, manager=request.user)
-            task = Task.objects.get(id=task_id, project=project)
-        except Project.DoesNotExist:
-            return Response({"detail": "Project not found or you do not have permission."}, status=404)
-        except Task.DoesNotExist:
-            return Response({"detail": "Task not found in this project."}, status=404)
 
-        developer_ids_to_remove = request.data.get('developers', [])
-        
-        task.developers.remove(*developer_ids_to_remove)
-        task.save()
-
-        return Response(TaskSerializer(task).data)
 
 
 class EditTaskView(generics.UpdateAPIView):
@@ -511,12 +513,9 @@ class EvaluateRiskLevelView(APIView):
 
 
 
-# views.py
 
-from rest_framework import permissions, status
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from .models import Task
+
+
 
 class TaskDetailForManagerView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]
@@ -536,6 +535,8 @@ class TaskDetailForManagerView(APIView):
 
         # Calculate time taken by the developer
         actual_time_taken = task.end_time - task.start_time
+        task.actual_time_spent = actual_time_taken
+        task.save()
 
         # Ensure manager_end_time and manager_start_time are set
         if task.manager_start_time is None or task.manager_end_time is None:
@@ -551,13 +552,106 @@ class TaskDetailForManagerView(APIView):
         else:
             message = 'The task was completed but exceeded the deadline.'
 
+        # Format actual_time_taken into days, hours, minutes
+        days = actual_time_taken.days
+        seconds = actual_time_taken.seconds
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+
+        actual_time_taken_str = f"{days} days, {hours} hours, {minutes} minutes"
+
+        # Update developer KPIs
+        developer_metrics, created = DeveloperMetrics.objects.get_or_create(developer=task.developer)
+        developer_metrics.tasks_completed += 1
+
+        if developer_metrics.average_completion_time:
+            developer_metrics.average_completion_time = (
+                developer_metrics.average_completion_time + actual_time_taken
+            ) / 2
+        else:
+            developer_metrics.average_completion_time = actual_time_taken
+
+        if developer_metrics.total_delivery_time and developer_metrics.total_allocated_time:
+            developer_metrics.total_delivery_time += actual_time_taken
+            developer_metrics.total_allocated_time += allocated_time
+        else:
+            developer_metrics.total_delivery_time = actual_time_taken
+            developer_metrics.total_allocated_time = allocated_time
+
+        developer_metrics.save()
+
         return Response({
             'task_name': task.title,
             'message': message,
-            'time_taken': str(actual_time_taken),
+            'time_taken': actual_time_taken_str,
             'allocated_time': str(allocated_time),
             'start_time': task.start_time,
             'end_time': task.end_time,
             'manager_start_time': task.manager_start_time,
             'manager_end_time': task.manager_end_time
         }, status=status.HTTP_200_OK)
+
+
+
+
+
+
+
+
+class DeveloperMetricsView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        # Get the projects managed by the authenticated manager
+        projects_managed = Project.objects.filter(manager=request.user)
+        
+        # Get the developers assigned to these projects
+        developers = CustomUser.objects.filter(assigned_tasks__project__in=projects_managed).distinct()
+        
+        metrics = []
+
+        for developer in developers:
+            tasks = Task.objects.filter(developer=developer, project__in=projects_managed)
+            tasks_completed = tasks.filter(status='completed').count()
+            tasks_reassigned = tasks.filter(status='reassigned').count()
+            
+            if tasks_completed > 0:
+                total_delivery_time = tasks.aggregate(total_delivery_time=Sum(ExpressionWrapper(F('end_time') - F('start_time'), output_field=DurationField())))['total_delivery_time']
+                total_allocated_time = tasks.aggregate(total_allocated_time=Sum(ExpressionWrapper(F('manager_end_time') - F('manager_start_time'), output_field=DurationField())))['total_allocated_time']
+
+                avg_delivery_time = total_delivery_time / tasks_completed if total_delivery_time else None
+                avg_allocated_time = total_allocated_time / tasks_completed if total_allocated_time else None
+                
+                if avg_delivery_time and avg_allocated_time:
+                    if avg_delivery_time < avg_allocated_time:
+                        delivery_status = 'early'
+                    elif avg_delivery_time == avg_allocated_time:
+                        delivery_status = 'on time'
+                    else:
+                        delivery_status = 'late'
+                else:
+                    delivery_status = 'N/A'
+                
+                avg_completion_time = tasks.aggregate(avg_completion_time=Avg(ExpressionWrapper(F('end_time') - F('start_time'), output_field=DurationField())))['avg_completion_time']
+                if avg_completion_time:
+                    total_seconds = avg_completion_time.total_seconds()
+                    hours = int(total_seconds // 3600)
+                    minutes = int((total_seconds % 3600) // 60)
+                    average_completion_time_str = f"{hours} hours, {minutes} minutes"
+                else:
+                    average_completion_time_str = "N/A"
+            else:
+                delivery_status = 'N/A'
+                average_completion_time_str = "N/A"
+
+            metrics.append({
+                'developer': developer.username,
+                'tasks_completed': tasks_completed,
+                'average_completion_time': average_completion_time_str,
+                'tasks_reassigned': tasks_reassigned,
+                'average_delivery_status': delivery_status,
+            })
+
+        return Response(metrics, status=status.HTTP_200_OK)
+
+        

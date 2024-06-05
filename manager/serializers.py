@@ -14,6 +14,7 @@ class ProjectSerializer(serializers.ModelSerializer):
         model = Project
         fields = ['id', 'name', 'scope', 'deadline', 'developers', 'created_at', 'updated_at']
 
+
     def create(self, validated_data):
         developer_emails = validated_data.pop('developers')
         developers = CustomUser.objects.filter(email__in=developer_emails, admin_role=False)
@@ -42,33 +43,41 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class TaskSerializer(serializers.ModelSerializer):
-    developers = serializers.SlugRelatedField(slug_field='email', queryset=CustomUser.objects.all(), many=True)
+    developer = serializers.SlugRelatedField(slug_field='email', queryset=CustomUser.objects.all(), many=False)
 
     class Meta:
         model = Task
-        fields = ['id', 'title', 'description', 'developers', 'status', 'project', 'start_time', 'end_time', 'manager_start_time', 'manager_end_time']
+        fields = ['id', 'title', 'description', 'developer', 'status', 'project', 'start_time', 'end_time', 'manager_start_time', 'manager_end_time']
         read_only_fields = ['project', 'start_time', 'end_time']
 
     def validate_developers(self, value):
         """
-        Check that each developer is assigned to the project.
+        Check that the developer is assigned to the project.
         """
         project_id = self.context['view'].kwargs.get('project_id')
         project = Project.objects.get(id=project_id)
 
-        for developer in value:
-            if developer not in project.developers.all():
-                raise serializers.ValidationError(f"Developer {developer.email} is not assigned to this project.")
-        return value
+        try:
+            # Retrieve the developer object based on the email
+            developer_email = value
+            developer = CustomUser.objects.get(email=developer_email)
+        except CustomUser.DoesNotExist:
+            raise serializers.ValidationError(f"Developer with email {developer_email} does not exist.")
 
-    def validate_end_time_m(self, value):
+        if developer not in project.developers.all():
+            raise serializers.ValidationError(f"Developer {developer.email} is not assigned to this project.")
+
+        return developer
+
+
+    def validate_end_time(self, value):
         """
         Ensure that the task deadline is not before the project's deadline.
         """
         project_id = self.context['view'].kwargs.get('project_id')
         project = Project.objects.get(id=project_id)
 
-        if value > project.deadline:
+        if value > project.manager_end_time:
             raise serializers.ValidationError("Task deadline cannot exceed the project's deadline.")
         return value
 

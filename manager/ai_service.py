@@ -1,16 +1,17 @@
 
 
 def generate_requirements(scope):
-    functional_requirements = [
-        "The system can process orders in real-time.",
-        "Users can create and customize individual pizzas.",
-    ]
+    functional_requirements = (
+        "The system can process orders in real-time. "
+        "The platform supports advanced order processing features."
+    )
     non_functional_requirements = [
         "Performance: Processes orders quickly and accurately.",
         "Usability: The interface is intuitive and accessible to all users.",
         "Security: Protects user data and transaction information."
     ]
     return functional_requirements, non_functional_requirements
+
 
 # risk_management/ai_service.py
 
