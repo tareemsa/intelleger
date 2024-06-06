@@ -46,7 +46,7 @@ class StartTaskView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = TaskSerializer
     def post(self, request, pk):
-        task = Task.objects.get(pk=pk, developers=request.user)
+        task = Task.objects.get(pk=pk, developer=request.user)
         task.status = 'in_progress'
         task.start_time = timezone.now()  # Log start time
         task.save()
@@ -56,7 +56,7 @@ class CompleteTaskView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
-        task = Task.objects.get(pk=pk, developers=request.user)
+        task = Task.objects.get(pk=pk, developer=request.user)
         if task.status == 'in_progress':
             task.status = 'completed'
             task.end_time = timezone.now()  # Log end time
@@ -96,6 +96,7 @@ class ToDoRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         return ToDo.objects.filter(developer=self.request.user)
 
+
 class RestartTaskView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -119,3 +120,5 @@ class RestartTaskView(APIView):
             return Response({'message': 'Task returned to In Progress.'}, status=status.HTTP_200_OK)
 
         return Response({'message': 'Task is not completed.'}, status=status.HTTP_400_BAD_REQUEST)
+
+

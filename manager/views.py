@@ -13,6 +13,7 @@ from django.shortcuts import get_object_or_404
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from .ai_service import generate_requirements,evaluate_risk_level # AI service integration
 from django.db.models import Count, Avg,Sum, F, ExpressionWrapper, DurationField
+from django.utils import timezone
 #########################PROJECT#########################
 
  # AI service integration
@@ -313,6 +314,48 @@ class ListTasksForProjectView(generics.ListAPIView):
 
         return Task.objects.filter(project=project)
 
+
+
+
+class ListProjectsForGanttChartView(generics.ListAPIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+
+    def get_queryset(self):
+        user = self.request.user
+        return Project.objects.filter(manager=user)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        project_data = {}
+
+        for project in queryset:
+            end_date = project.deadline
+            start_date = project.created_at
+            remaining_days = (end_date.date() - timezone.now().date()).days  # Include the current day
+            total_duration = (end_date.date() - start_date.date()).days
+            elapsed_days = (timezone.now().date() - start_date.date()).days
+            percentage_elapsed = round((elapsed_days / total_duration) * 100) if total_duration > 0 else 0
+
+            if remaining_days < 0:
+                status = 'Completed'
+                remaining_days = 0  # or some other value indicating the project is done
+                percentage_elapsed = 100
+            else:
+                status = 'In Progress'
+
+            project_data[project.id] = {
+                'id': project.id,
+                'name': project.name,
+                'start_date': start_date,
+                'end_date': end_date,
+                'remaining_days': remaining_days,
+                'status': status,
+                'percentage_elapsed': percentage_elapsed
+            }
+
+        return Response(project_data)
+
+
 #########################TASK#########################
 
 class CreateTaskView(generics.CreateAPIView):
@@ -599,7 +642,7 @@ class TaskDetailForManagerView(APIView):
 
 
 class DeveloperMetricsView(APIView):
-    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+    permission_classes = [permissions.IsAuthenticated,IsAdminUser]
 
     def get(self, request):
         # Get the projects managed by the authenticated manager
@@ -613,11 +656,17 @@ class DeveloperMetricsView(APIView):
         for developer in developers:
             tasks = Task.objects.filter(developer=developer, project__in=projects_managed)
             tasks_completed = tasks.filter(status='completed').count()
-            tasks_reassigned = tasks.filter(status='reassigned').count()
+
+            developer_metrics = DeveloperMetrics.objects.get(developer=developer)
+            tasks_reassigned = developer_metrics.tasks_reassigned
             
             if tasks_completed > 0:
-                total_delivery_time = tasks.aggregate(total_delivery_time=Sum(ExpressionWrapper(F('end_time') - F('start_time'), output_field=DurationField())))['total_delivery_time']
-                total_allocated_time = tasks.aggregate(total_allocated_time=Sum(ExpressionWrapper(F('manager_end_time') - F('manager_start_time'), output_field=DurationField())))['total_allocated_time']
+                total_delivery_time = tasks.aggregate(
+                    total_delivery_time=Sum(ExpressionWrapper(F('end_time') - F('start_time'), output_field=DurationField()))
+                )['total_delivery_time']
+                total_allocated_time = tasks.aggregate(
+                    total_allocated_time=Sum(ExpressionWrapper(F('manager_end_time') - F('manager_start_time'), output_field=DurationField()))
+                )['total_allocated_time']
 
                 avg_delivery_time = total_delivery_time / tasks_completed if total_delivery_time else None
                 avg_allocated_time = total_allocated_time / tasks_completed if total_allocated_time else None
@@ -632,7 +681,9 @@ class DeveloperMetricsView(APIView):
                 else:
                     delivery_status = 'N/A'
                 
-                avg_completion_time = tasks.aggregate(avg_completion_time=Avg(ExpressionWrapper(F('end_time') - F('start_time'), output_field=DurationField())))['avg_completion_time']
+                avg_completion_time = tasks.aggregate(
+                    avg_completion_time=Avg(ExpressionWrapper(F('end_time') - F('start_time'), output_field=DurationField()))
+                )['avg_completion_time']
                 if avg_completion_time:
                     total_seconds = avg_completion_time.total_seconds()
                     hours = int(total_seconds // 3600)
@@ -653,5 +704,6 @@ class DeveloperMetricsView(APIView):
             })
 
         return Response(metrics, status=status.HTTP_200_OK)
+
 
         

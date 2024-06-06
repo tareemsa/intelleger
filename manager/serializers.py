@@ -3,17 +3,27 @@ from .models import Project,Task
 from .models import CustomUser
 from django.utils import timezone
 
+from rest_framework import serializers
+from accounts.models import CustomUser
+from .models import Project
+from django.utils import timezone
+from rest_framework.fields import DateTimeField
+
 class ProjectSerializer(serializers.ModelSerializer):
     developers = serializers.SlugRelatedField(
         many=True,
         slug_field='email',
         queryset=CustomUser.objects.filter(admin_role=False)
     )
+    
+    deadline = DateTimeField(
+        format='%Y-%m-%d', 
+        input_formats=['%Y-%m-%dT%H:%M:%S.%fZ', '%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d']
+    )
 
     class Meta:
         model = Project
         fields = ['id', 'name', 'scope', 'deadline', 'developers', 'created_at', 'updated_at']
-
 
     def create(self, validated_data):
         developer_emails = validated_data.pop('developers')
