@@ -18,14 +18,16 @@ class DeveloperTaskListView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Task.objects.filter(developers=self.request.user)
+        return Task.objects.filter(developer=self.request.user)
+    
 #list specific task details
 class DeveloperTaskDetailView(generics.RetrieveAPIView):
     serializer_class = TaskSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Task.objects.filter(developers=self.request.user)
+        return Task.objects.filter(developer=self.request.user)
+    
 #list developer projects 
 class DeveloperProjectListView(generics.ListAPIView):
     serializer_class = ProjectSerializer
@@ -33,6 +35,7 @@ class DeveloperProjectListView(generics.ListAPIView):
 
     def get_queryset(self):
         return Project.objects.filter(developers=self.request.user)
+    
 #list specific project details 
 class DeveloperProjectDetailView(generics.RetrieveAPIView):
     serializer_class = ProjectSerializer

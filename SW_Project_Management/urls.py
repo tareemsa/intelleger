@@ -24,6 +24,7 @@ urlpatterns = [
     #path('api/',include('project_management.urls')),
     path('api/',include('manager.urls')),
     path('api/',include('developer.urls')),
+    path('api/',include('git_sonar.urls'))
 ]
 
 

@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'manager',
     'developer',
     'corsheaders',
+    'git_sonar',
     
 ]
 
@@ -191,5 +192,7 @@ AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',  # Optional, to keep the default backend
 ]
 
+GITHUB_CLIENT_ID = 'Ov23ctsWx94DNBRhbkRR'
+GITHUB_CLIENT_SECRET = 'd4529c9f0ae5b079fdd938dddec34b9aff36d6bd'
 
 

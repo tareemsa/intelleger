@@ -12,7 +12,7 @@ from rest_framework.exceptions import PermissionDenied,NotFound
 from django.shortcuts import get_object_or_404
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from .ai_service import generate_requirements,evaluate_risk_level # AI service integration
-from django.db.models import Count, Avg,Sum, F, ExpressionWrapper, DurationField
+from django.db.models import  Avg,Sum, F, ExpressionWrapper, DurationField
 from django.utils import timezone
 #########################PROJECT#########################
 
