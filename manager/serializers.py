@@ -52,22 +52,34 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 
+from rest_framework import serializers
+from rest_framework.fields import DateTimeField
+from .models import Task, CustomUser, Project
+
 class TaskSerializer(serializers.ModelSerializer):
-    developer = serializers.SlugRelatedField(slug_field='email', queryset=CustomUser.objects.all(), many=False)
-    start_time = DateTimeField(
-        format='%Y-%m-%d', 
-        input_formats=['%Y-%m-%dT%H:%M:%S.%fZ', '%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d']
+    developer = serializers.SlugRelatedField(
+        slug_field='email',
+        queryset=CustomUser.objects.all(),
+        many=False
     )
-    end_time = DateTimeField(
-        format='%Y-%m-%d', 
-        input_formats=['%Y-%m-%dT%H:%M:%S.%fZ', '%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d']
-    )
+
+    datetime_field_params = {
+        'format': '%Y-%m-%d',
+        'input_formats': ['%Y-%m-%dT%H:%M:%S.%fZ', '%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d']
+    }
+
+    start_time = DateTimeField(**datetime_field_params)
+    manager_start_time = DateTimeField(**datetime_field_params)
+    manager_end_time = DateTimeField(**datetime_field_params)
+    end_time = DateTimeField(**datetime_field_params)
 
     class Meta:
         model = Task
-        fields = ['id', 'title', 'description', 'developer', 'status', 'project', 'start_time', 'end_time', 'manager_start_time', 'manager_end_time']
+        fields = [
+            'id', 'title', 'description', 'developer', 'status', 'project',
+            'start_time', 'end_time', 'manager_start_time', 'manager_end_time'
+        ]
         read_only_fields = ['project', 'start_time', 'end_time']
-
 
     def validate_developers(self, value):
         """
@@ -87,7 +99,6 @@ class TaskSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(f"Developer {developer.email} is not assigned to this project.")
 
         return developer
-
 
     def validate_end_time(self, value):
         """
