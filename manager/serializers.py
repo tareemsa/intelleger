@@ -54,11 +54,20 @@ class UserSerializer(serializers.ModelSerializer):
 
 class TaskSerializer(serializers.ModelSerializer):
     developer = serializers.SlugRelatedField(slug_field='email', queryset=CustomUser.objects.all(), many=False)
+    start_time = DateTimeField(
+        format='%Y-%m-%d', 
+        input_formats=['%Y-%m-%dT%H:%M:%S.%fZ', '%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d']
+    )
+    end_time = DateTimeField(
+        format='%Y-%m-%d', 
+        input_formats=['%Y-%m-%dT%H:%M:%S.%fZ', '%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d']
+    )
 
     class Meta:
         model = Task
         fields = ['id', 'title', 'description', 'developer', 'status', 'project', 'start_time', 'end_time', 'manager_start_time', 'manager_end_time']
         read_only_fields = ['project', 'start_time', 'end_time']
+
 
     def validate_developers(self, value):
         """

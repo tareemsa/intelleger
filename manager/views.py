@@ -642,7 +642,7 @@ class TaskDetailForManagerView(APIView):
 
 
 class DeveloperMetricsView(APIView):
-    permission_classes = [permissions.IsAuthenticated,IsAdminUser]
+    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
 
     def get(self, request):
         # Get the projects managed by the authenticated manager
@@ -695,15 +695,45 @@ class DeveloperMetricsView(APIView):
                 delivery_status = 'N/A'
                 average_completion_time_str = "N/A"
 
+            # Calculate the rating based on the metrics
+            rating = self.calculate_rating(tasks_completed, tasks_reassigned, delivery_status)
+            
             metrics.append({
                 'developer': developer.username,
                 'tasks_completed': tasks_completed,
                 'average_completion_time': average_completion_time_str,
                 'tasks_reassigned': tasks_reassigned,
                 'average_delivery_status': delivery_status,
+                'rating': rating,
             })
 
         return Response(metrics, status=status.HTTP_200_OK)
+
+    def calculate_rating(self, tasks_completed, tasks_reassigned, delivery_status):
+        # Define the rating criteria
+        rating_criteria = {
+            'tasks_completed': 0.3,
+            'tasks_reassigned': 0.2,
+            'delivery_status': 0.5,
+        }
+
+        # Calculate the rating
+        rating = 0
+        if tasks_completed > 0:
+            rating += rating_criteria['tasks_completed']
+        if tasks_reassigned == 0:
+            rating += rating_criteria['tasks_reassigned']
+        if delivery_status == 'early':
+            rating += rating_criteria['delivery_status']
+        elif delivery_status == 'on time':
+            rating += rating_criteria['delivery_status'] * 0.8
+        else:
+            rating -= rating_criteria['delivery_status'] * 0.2
+
+        # Normalize the rating to a scale of 1-5
+        rating = round(rating * 5, 1)
+
+        return rating
 
 
         
