@@ -50,12 +50,6 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 
-
-
-from rest_framework import serializers
-from rest_framework.fields import DateTimeField
-from .models import Task, CustomUser, Project
-
 class TaskSerializer(serializers.ModelSerializer):
     developer = serializers.SlugRelatedField(
         slug_field='email',

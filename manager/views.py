@@ -317,6 +317,8 @@ class ListTasksForProjectView(generics.ListAPIView):
 
 
 
+
+
 class ListProjectsForGanttChartView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]
 
@@ -346,15 +348,14 @@ class ListProjectsForGanttChartView(generics.ListAPIView):
             project_data[project.id] = {
                 'id': project.id,
                 'name': project.name,
-                'start_date': start_date,
-                'end_date': end_date,
+                'start_date': start_date.isoformat(),  # Serialize dates to ISO format
+                'end_date': end_date.isoformat(),      # Serialize dates to ISO format
                 'remaining_days': remaining_days,
                 'status': status,
                 'percentage_elapsed': percentage_elapsed
             }
 
         return Response(project_data)
-
 
 #########################TASK#########################
 
