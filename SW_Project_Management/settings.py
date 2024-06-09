@@ -48,7 +48,8 @@ INSTALLED_APPS = [
     'manager',
     'developer',
     'corsheaders',
-    'git_sonar',
+  
+
     
 ]
 
@@ -190,10 +191,12 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTHENTICATION_BACKENDS = [
     'accounts.authentication.EmailBackend',  # Use your app name and the correct path
     'django.contrib.auth.backends.ModelBackend',  # Optional, to keep the default backend
+   
 ]
 
-GITHUB_CLIENT_ID = 'Ov23ctsWx94DNBRhbkRR'
-GITHUB_CLIENT_SECRET = 'd4529c9f0ae5b079fdd938dddec34b9aff36d6bd'
+
+
+
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",

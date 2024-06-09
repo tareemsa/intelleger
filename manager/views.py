@@ -319,6 +319,7 @@ class ListTasksForProjectView(generics.ListAPIView):
 
 
 
+
 class ListProjectsForGanttChartView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]
 
@@ -328,34 +329,34 @@ class ListProjectsForGanttChartView(generics.ListAPIView):
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
-        project_data = {}
+        project_data = []
 
         for project in queryset:
             end_date = project.deadline
             start_date = project.created_at
-            remaining_days = (end_date.date() - timezone.now().date()).days  # Include the current day
+            remaining_days = (end_date.date() - timezone.now().date()).days
             total_duration = (end_date.date() - start_date.date()).days
             elapsed_days = (timezone.now().date() - start_date.date()).days
             percentage_elapsed = round((elapsed_days / total_duration) * 100) if total_duration > 0 else 0
 
             if remaining_days < 0:
                 status = 'Completed'
-                remaining_days = 0  # or some other value indicating the project is done
+                remaining_days = 0
                 percentage_elapsed = 100
             else:
                 status = 'In Progress'
 
-            project_data[project.id] = {
+            project_data.append({
                 'id': project.id,
                 'name': project.name,
-                'start_date': start_date.isoformat(),  # Serialize dates to ISO format
-                'end_date': end_date.isoformat(),      # Serialize dates to ISO format
+                'start_date': start_date.isoformat(),
+                'end_date': end_date.isoformat(),
                 'remaining_days': remaining_days,
                 'status': status,
                 'percentage_elapsed': percentage_elapsed
-            }
+            })
 
-        return Response(project_data)
+        return Response(project_data, status=200)
 
 #########################TASK#########################
 
