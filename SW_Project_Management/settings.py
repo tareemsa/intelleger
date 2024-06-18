@@ -32,7 +32,11 @@ ALLOWED_HOSTS = []
 
 ASGI_APPLICATION = 'sw_project_management.asgi.application'
 
-
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer"
+    }
+}
 
 
 INSTALLED_APPS = [
@@ -48,6 +52,7 @@ INSTALLED_APPS = [
     'manager',
     'developer',
     'corsheaders',
+    'channels',
   
 
     

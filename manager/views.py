@@ -14,6 +14,9 @@ from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from .ai_service import generate_requirements,evaluate_risk_level # AI service integration
 from django.db.models import  Avg,Sum, F, ExpressionWrapper, DurationField
 from django.utils import timezone
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+
 #########################PROJECT#########################
 
  # AI service integration
@@ -363,7 +366,7 @@ class ListProjectsForGanttChartView(generics.ListAPIView):
 class CreateTaskView(generics.CreateAPIView):
     queryset = Task.objects.all()
     serializer_class = TaskSerializer
-    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsAdminUser]
 
     def perform_create(self, serializer):
         project_id = self.kwargs.get('project_id')
@@ -384,6 +387,16 @@ class CreateTaskView(generics.CreateAPIView):
         # Save the task with the project and developer
         serializer.save(project=project, developer=developer)
 
+        # Send notification to the developer
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f'notifications_{developer.id}',
+            {
+                'type': 'send_notification',
+                'notification': f'You have been assigned a new task: '
+            }
+        )
+
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
         if response.status_code == status.HTTP_201_CREATED:
@@ -392,6 +405,7 @@ class CreateTaskView(generics.CreateAPIView):
                 'message': 'Task created successfully'
             }, status=status.HTTP_201_CREATED)
         return response
+
         #############################################################################################
 
  
@@ -451,10 +465,27 @@ class EditTaskView(generics.UpdateAPIView):
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
+
+        # Store the old developer for comparison later
+        old_developer = instance.developer
+
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
-        
+
+        # Check if the developer has changed
+        new_developer = instance.developer
+        if old_developer != new_developer:
+            # Send notification to the new developer
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f'notifications_{new_developer.id}',
+                {
+                    'type': 'send_notification',
+                    'notification': f'You have been assigned a new task: {instance.title}'
+                }
+            )
+
         return Response({
             'status': 'success',
             'message': 'Task updated successfully',

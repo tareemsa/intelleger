@@ -9,6 +9,9 @@ from .models import ToDo
 from manager.models import DeveloperMetrics,Task
 from .serializers import ToDoSerializer
 from django.utils import timezone
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+
 
 
 #list alll developer tasks 
@@ -64,8 +67,20 @@ class CompleteTaskView(APIView):
             task.status = 'completed'
             task.end_time = timezone.now()  # Log end time
             task.save()
+            print(f"Manager ID: {task.project.manager.id}")
+            manager_id = task.project.manager.id
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f'notifications_{manager_id}',
+                {
+                    'type': 'send_notification',
+                    'notification': f'Task "{task.title}" has been completed  .'
+                }
+            )
+
             return Response({'message': 'Task completed.'}, status=status.HTTP_200_OK)
         return Response({'message': 'Task is not in progress.'}, status=status.HTTP_400_BAD_REQUEST)
+
 
 #generate_code 
 class GenerateCodeFromDescriptionView(APIView):
